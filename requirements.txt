@@ -1,0 +1,7 @@
+gitpython
+requests
+logging
+random
+shutil
+colorama
+selenium
