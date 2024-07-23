@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import requests
+from requests_html import HTMLSession
 import os
 import re
 import logging
@@ -14,10 +15,6 @@ import shutil
 import ctypes
 from colorama import Fore, Style, init
 from getpass import getpass
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 import subprocess
 import git
 
@@ -41,7 +38,7 @@ CAPTCHA_INDICATORS = [
 
 COMMON_FOLDERS = ['assets', 'static', 'js', 'css', 'images', 'img', 'media', 'files', 'scripts', 'styles']
 
-session = requests.Session()
+session = HTMLSession()
 session.headers.update({
     "User-Agent": random.choice(USER_AGENTS),
     "Referer": "https://www.google.com"
@@ -150,43 +147,19 @@ def get_website_source(url, download_folder):
     global start_time
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
-    options = Options()
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-devtools')
-    options.add_argument('--remote-debugging-port=9222')
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_argument('--user-agent=' + random.choice(USER_AGENTS))
-    driver = None
     try:
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        driver.get(url)
-        start_time = time.time()
-        html_content = driver.page_source
+        response = session.get(url)
+        html_content = response.text
         if detect_captcha(html_content):
-            options.headless = False
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-            driver.get(url)
-            wait_for_captcha()
-            html_content = driver.page_source
-        cookies = driver.get_cookies()
-        for cookie in cookies:
-            session.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
-        page_source = driver.page_source
+            print("CAPTCHA detected. Please solve the CAPTCHA in your browser and press Enter to continue...")
+            return
     except Exception as e:
         logging.error(f"{Fore.RED}Failed to fetch {url}: {e}{Style.RESET_ALL}")
-        if driver:
-            driver.quit()
         return
-    finally:
-        if driver:
-            driver.quit()
-    soup = BeautifulSoup(page_source, 'html.parser')
+    soup = BeautifulSoup(html_content, 'html.parser')
     main_page_path = os.path.join(download_folder, 'index.html')
     with open(main_page_path, 'w', encoding='utf-8', errors='surrogateescape') as f:
-        f.write(page_source)
+        f.write(html_content)
     resources = set()
     for tag in soup.find_all(['script', 'link', 'img', 'a', 'source', 'iframe', 'video', 'audio']):
         src_attr = 'src' if tag.name in ['script', 'img', 'source', 'iframe', 'video', 'audio'] else 'href'
@@ -204,7 +177,7 @@ def get_website_source(url, download_folder):
         if not os.path.exists(resource_folder):
             os.makedirs(resource_folder, exist_ok=True)
         download_queue.put((resource_url, resource_folder))
-    github_links = re.findall(r'https://github\.com/[A-Za-z0-9._%+-/]+', page_source)
+    github_links = re.findall(r'https://github\.com/[A-Za-z0-9._%+-/]+', html_content)
     if github_links:
         with open(os.path.join(download_folder, 'github_repos.txt'), 'w', encoding='utf-8') as f:
             for link in github_links:
@@ -432,6 +405,18 @@ def check_for_updates():
     except Exception as e:
         logging.error(f"Failed to check for updates: {e}")
 
+def update_repo():
+    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
+    local_repo_path = os.getcwd()
+
+    try:
+        repo = git.Repo(local_repo_path, search_parent_directories=True)
+        origin = repo.remotes.origin
+        origin.pull()
+        print("Repository updated successfully.")
+    except Exception as e:
+        print(f"Failed to update repository: {e}")
+
 def main_menu(username, rank):
     os.system('cls' if os.name == 'nt' else 'clear')
     print(print_fartbin_art())
@@ -506,3 +491,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    update_repo()
