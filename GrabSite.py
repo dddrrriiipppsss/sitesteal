@@ -296,8 +296,12 @@ def fetch_github_list(file_name):
 
 def update_github_list(file_name, content):
     local_repo_path = os.getcwd()
-    repo = git.Repo(local_repo_path)
-    file_path = os.path.join(local_repo_path, file_name)
+    try:
+        repo = git.Repo(local_repo_path, search_parent_directories=True)
+    except git.exc.InvalidGitRepositoryError:
+        logging.error("Current directory is not a valid Git repository.")
+        return
+    file_path = os.path.join(repo.working_tree_dir, file_name)
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(content))
     repo.index.add([file_path])
