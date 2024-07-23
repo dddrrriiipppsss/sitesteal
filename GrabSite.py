@@ -1,5 +1,5 @@
-import requests
 from bs4 import BeautifulSoup
+import requests
 import os
 import re
 import logging
@@ -285,8 +285,30 @@ def get_hwid():
     )
     return str(serial_number.value)
 
+def fetch_github_list(file_name):
+    repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
+    response = requests.get(repo_url + file_name)
+    if response.status_code == 200:
+        return response.text.splitlines()
+    else:
+        logging.error(f"Failed to fetch {file_name} from GitHub")
+        return []
+
+def update_github_list(file_name, content):
+    local_repo_path = os.getcwd()
+    repo = git.Repo(local_repo_path)
+    file_path = os.path.join(local_repo_path, file_name)
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(content))
+    repo.index.add([file_path])
+    repo.index.commit(f"Update {file_name}")
+    origin = repo.remotes.origin
+    origin.push()
+
 def login():
-    global first_login
+    global first_login, whitelist, blacklist
+    whitelist = fetch_github_list("whitelist.txt")
+    blacklist = fetch_github_list("blacklist.txt")
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
@@ -340,11 +362,13 @@ def manage_whitelist():
             user_to_add = input("Enter username to whitelist: ")
             whitelist.append(user_to_add)
             print(f"{user_to_add} has been whitelisted.")
+            update_github_list("whitelist.txt", whitelist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
             if user_to_remove in whitelist:
                 whitelist.remove(user_to_remove)
                 print(f"{user_to_remove} has been removed from the whitelist.")
+                update_github_list("whitelist.txt", whitelist)
             else:
                 print(f"{user_to_remove} is not in the whitelist.")
         elif option == '3':
@@ -368,11 +392,13 @@ def manage_blacklist():
             user_to_add = input("Enter username to blacklist: ")
             blacklist.append(user_to_add)
             print(f"{user_to_add} has been blacklisted.")
+            update_github_list("blacklist.txt", blacklist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from blacklist: ")
             if user_to_remove in blacklist:
                 blacklist.remove(user_to_remove)
                 print(f"{user_to_remove} has been removed from the blacklist.")
+                update_github_list("blacklist.txt", blacklist)
             else:
                 print(f"{user_to_remove} is not in the blacklist.")
         elif option == '3':
@@ -385,7 +411,7 @@ def manage_blacklist():
             print("Invalid option. Please try again.")
 
 def check_for_updates():
-    repo_url = "https://github.com/yourusername/yourrepo.git"
+    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     local_repo_path = os.getcwd()
 
     try:
@@ -394,7 +420,7 @@ def check_for_updates():
         origin.fetch()
 
         local_commit = repo.head.commit
-        remote_commit = repo.heads.master.commit
+        remote_commit = origin.refs.main.commit
 
         if local_commit != remote_commit:
             logging.info("New update available. Running update script.")
