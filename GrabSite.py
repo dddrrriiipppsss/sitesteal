@@ -195,7 +195,7 @@ def is_obfuscated(content):
         r'atob\(["\'].*?["\']\)',
         r'["\']\.join\(["\']',
         r'\["[a-z0-9]+"\]\s*\((.*?)\)',
-        r'unescape\(["\'].*?["\']\)'
+        r'unescape\(["\'](.*?)["\']\)'
     ]
     return any(re.search(pattern, content) for pattern in patterns)
 

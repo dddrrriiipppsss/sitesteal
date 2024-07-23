@@ -5,3 +5,8 @@ random
 shutil
 colorama
 selenium
+pip install requests-html
+lxml[html_clean]
+lxml_html_clean
+gitpython
+
