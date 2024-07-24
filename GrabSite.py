@@ -267,7 +267,7 @@ def deobfuscate_js(content):
     original_content = content
     content = re.sub(r'eval\((.*?)\)', r'\1', content)
     content = re.sub(r'\\x([0-9A-Fa-f]{2})', lambda m: chr(int(m.group(1), 16)), content)
-    content = re.sub(r'\\u([0-9A-Fa-f]{4})', lambda m: chr(int(m.group(1), 16)), content)
+    content = re.sub(r'\\u([0x-9A-Fa-f]{4})', lambda m: chr(int(m.group(1), 16)), content)
     content = re.sub(r'([0-9a-fA-F]{2}\s*){8,}', lambda m: bytes.fromhex(m.group(0).replace(' ', '')).decode('utf-8', 'ignore'), content)
     content = re.sub(r'atob\(["\'](.*?)["\']\)', lambda m: decode_base64(m.group(1)), content)
     content = re.sub(r'["\']\.join\(["\']', '', content)
@@ -391,6 +391,10 @@ def login():
                 blacklist.append(username)
                 update_github_list("blacklist.json", blacklist)
                 print("Invalid password. You have been blacklisted.")
+                exit()
+            if username in logins and logins[username] != serials:
+                execute_wholesome_code()
+                print("Hardware serial mismatch. Access denied.")
                 exit()
         else:
             print("Invalid credentials.")
