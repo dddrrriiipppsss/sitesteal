@@ -58,7 +58,7 @@ download_queue = Queue()
 start_time = None
 num_threads = 64  # Increased number of threads for faster downloads
 
-whitelist = []
+whitelist = {}
 blacklist = []
 blacklisted_sites = []
 user_rank = ""
@@ -312,10 +312,13 @@ def scan_common_folders(download_folder, base_url):
 def fetch_github_list(file_name):
     repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
     response = requests.get(repo_url + file_name)
-    if response.status_code == 200:
-        return response.json()
+    if response.status_code == 200 and response.text.strip():
+        if file_name.endswith(".txt"):
+            return response.text.splitlines()
+        else:
+            return response.json()
     else:
-        logging.error(f"Failed to fetch {file_name} from GitHub")
+        logging.error(f"Failed to fetch {file_name} from GitHub or file is empty.")
         return []
 
 def update_github_list(file_name, content):
@@ -327,7 +330,10 @@ def update_github_list(file_name, content):
         return
     file_path = os.path.join(repo.working_tree_dir, file_name)
     with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, indent=4)
+        if file_name.endswith(".txt"):
+            f.write("\n".join(content))
+        else:
+            json.dump(content, f, indent=4)
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
     origin = repo.remotes.origin
@@ -342,6 +348,7 @@ def save_login(username):
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
     whitelist = fetch_github_list("whitelist.txt")
+    whitelist = {entry.split(':')[0]: entry.split(':')[1] for entry in whitelist}
     blacklist = fetch_github_list("blacklist.txt")
     blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
     logins = fetch_github_list(".logins")
@@ -409,13 +416,13 @@ def manage_whitelist():
             password = getpass("Enter password for this user: ")
             whitelist[user_to_add] = password
             print(f"{user_to_add} has been whitelisted.")
-            update_github_list("whitelist.txt", whitelist)
+            update_github_list("whitelist.txt", [f"{user}:{passw}" for user, passw in whitelist.items()])
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
             if user_to_remove in whitelist:
                 del whitelist[user_to_remove]
                 print(f"{user_to_remove} has been removed from the whitelist.")
-                update_github_list("whitelist.txt", whitelist)
+                update_github_list("whitelist.txt", [f"{user}:{passw}" for user, passw in whitelist.items()])
             else:
                 print(f"{user_to_remove} is not in the whitelist.")
         elif option == '3':
