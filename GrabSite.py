@@ -348,7 +348,14 @@ def save_login(username):
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
     whitelist = fetch_github_list("whitelist.txt")
-    whitelist = {entry.split(':')[0]: entry.split(':')[1] for entry in whitelist}
+    whitelist_dict = {}
+    for entry in whitelist:
+        try:
+            user, password = entry.split(':', 1)
+            whitelist_dict[user] = password
+        except ValueError:
+            logging.warning(f"Skipping invalid entry in whitelist: {entry}")
+    whitelist = whitelist_dict
     blacklist = fetch_github_list("blacklist.txt")
     blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
     logins = fetch_github_list(".logins")
