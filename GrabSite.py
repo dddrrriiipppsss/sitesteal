@@ -324,10 +324,10 @@ def fetch_github_list(file_name):
             return response.json()
         except json.JSONDecodeError:
             logging.error(f"Failed to decode {file_name} from GitHub as JSON.")
-            return []
+            return {} if file_name == "whitelist.json" else []
     else:
         logging.error(f"Failed to fetch {file_name} from GitHub or file is empty.")
-        return []
+        return {} if file_name == "whitelist.json" else []
 
 def update_github_list(file_name, content):
     local_repo_path = os.getcwd()
