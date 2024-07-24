@@ -20,7 +20,8 @@ import git
 from bs4 import BeautifulSoup
 import sys
 import json
-
+import ctypes
+from ctypes import windll, c_uint, c_ulong, c_int, byref
 # Fix for PyInstaller
 if getattr(sys, 'frozen', False):
     os.environ['PATH'] = sys._MEIPASS + ";" + os.environ['PATH']
