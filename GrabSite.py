@@ -313,8 +313,6 @@ def fetch_github_list(file_name):
     repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
     response = requests.get(repo_url + file_name)
     if response.status_code == 200 and response.text.strip():
-        if file_name.endswith(".txt"):
-            return response.text.splitlines()
         try:
             return response.json()
         except json.JSONDecodeError:
@@ -333,51 +331,24 @@ def update_github_list(file_name, content):
         return
     file_path = os.path.join(repo.working_tree_dir, file_name)
     with open(file_path, 'w', encoding='utf-8') as f:
-        if file_name.endswith(".txt"):
-            f.write("\n".join(content))
-        else:
-            json.dump(content, f, indent=4)
+        json.dump(content, f, indent=4)
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
     origin = repo.remotes.origin
     origin.push()
 
 def save_login(username):
-    logins = fetch_github_list(".logins.json")
-    logins_dict = {}
-    for entry in logins:
-        try:
-            user, serials = entry.split(':', 1)
-            logins_dict[user] = json.loads(serials)
-        except ValueError:
-            logging.warning(f"Skipping invalid entry in logins: {entry}")
+    logins = fetch_github_list("logins.json")
     serials = get_hardware_serials()
-    logins_dict[username] = serials
-    logins_list = [f"{user}:{json.dumps(serials)}" for user, serials in logins_dict.items()]
-    update_github_list(".logins.json", logins_list)
+    logins[username] = serials
+    update_github_list("logins.json", logins)
 
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
-    whitelist = fetch_github_list("whitelist.txt")
-    whitelist_dict = {}
-    for entry in whitelist:
-        try:
-            user, password = entry.split(':', 1)
-            whitelist_dict[user] = password
-        except ValueError:
-            logging.warning(f"Skipping invalid entry in whitelist: {entry}")
-    whitelist = whitelist_dict
-    blacklist = fetch_github_list("blacklist.txt")
-    blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
-    logins = fetch_github_list(".logins")
-    logins_dict = {}
-    for entry in logins:
-        try:
-            user, serials = entry.split(':', 1)
-            logins_dict[user] = json.loads(serials)
-        except ValueError:
-            logging.warning(f"Skipping invalid entry in logins: {entry}")
-    logins = logins_dict
+    whitelist = fetch_github_list("whitelist.json")
+    blacklist = fetch_github_list("blacklist.json")
+    blacklisted_sites = fetch_github_list("blacklisted_sites.json")
+    logins = fetch_github_list("logins.json")
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
@@ -403,7 +374,7 @@ def login():
             if username in whitelist:
                 if whitelist[username] != password:
                     blacklist.append(username)
-                    update_github_list("blacklist.txt", blacklist)
+                    update_github_list("blacklist.json", blacklist)
                     print("Invalid password. You have been blacklisted.")
                     exit()
             else:
@@ -418,7 +389,7 @@ def login():
     if saved_username in whitelist:
         if whitelist[saved_username] != saved_password:
             blacklist.append(saved_username)
-            update_github_list("blacklist.txt", blacklist)
+            update_github_list("blacklist.json", blacklist)
             print("Invalid password. You have been blacklisted.")
             exit()
     if saved_username in logins and logins[saved_username] != saved_serials:
@@ -443,13 +414,13 @@ def manage_whitelist():
             password = getpass("Enter password for this user: ")
             whitelist[user_to_add] = password
             print(f"{user_to_add} has been whitelisted.")
-            update_github_list("whitelist.txt", [f"{user}:{passw}" for user, passw in whitelist.items()])
+            update_github_list("whitelist.json", whitelist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
             if user_to_remove in whitelist:
                 del whitelist[user_to_remove]
                 print(f"{user_to_remove} has been removed from the whitelist.")
-                update_github_list("whitelist.txt", [f"{user}:{passw}" for user, passw in whitelist.items()])
+                update_github_list("whitelist.json", whitelist)
             else:
                 print(f"{user_to_remove} is not in the whitelist.")
         elif option == '3':
@@ -476,13 +447,13 @@ def manage_blacklist():
             user_to_add = input("Enter username to blacklist: ")
             blacklist.append(user_to_add)
             print(f"{user_to_add} has been blacklisted.")
-            update_github_list("blacklist.txt", blacklist)
+            update_github_list("blacklist.json", blacklist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from blacklist: ")
             if user_to_remove in blacklist:
                 blacklist.remove(user_to_remove)
                 print(f"{user_to_remove} has been removed from the blacklist.")
-                update_github_list("blacklist.txt", blacklist)
+                update_github_list("blacklist.json", blacklist)
             else:
                 print(f"{user_to_remove} is not in the blacklist.")
         elif option == '3':
