@@ -315,8 +315,11 @@ def fetch_github_list(file_name):
     if response.status_code == 200 and response.text.strip():
         if file_name.endswith(".txt"):
             return response.text.splitlines()
-        else:
+        try:
             return response.json()
+        except json.JSONDecodeError:
+            logging.error(f"Failed to decode {file_name} from GitHub as JSON.")
+            return []
     else:
         logging.error(f"Failed to fetch {file_name} from GitHub or file is empty.")
         return []
@@ -341,9 +344,17 @@ def update_github_list(file_name, content):
 
 def save_login(username):
     logins = fetch_github_list(".logins")
+    logins_dict = {}
+    for entry in logins:
+        try:
+            user, serials = entry.split(':', 1)
+            logins_dict[user] = json.loads(serials)
+        except ValueError:
+            logging.warning(f"Skipping invalid entry in logins: {entry}")
     serials = get_hardware_serials()
-    logins[username] = serials
-    update_github_list(".logins", logins)
+    logins_dict[username] = serials
+    logins_list = [f"{user}:{json.dumps(serials)}" for user, serials in logins_dict.items()]
+    update_github_list(".logins", logins_list)
 
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
@@ -359,6 +370,14 @@ def login():
     blacklist = fetch_github_list("blacklist.txt")
     blacklisted_sites = fetch_github_list("blacklisted_sites.txt")
     logins = fetch_github_list(".logins")
+    logins_dict = {}
+    for entry in logins:
+        try:
+            user, serials = entry.split(':', 1)
+            logins_dict[user] = json.loads(serials)
+        except ValueError:
+            logging.warning(f"Skipping invalid entry in logins: {entry}")
+    logins = logins_dict
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
@@ -366,7 +385,8 @@ def login():
                 saved_username, saved_password, saved_serials = f.read().strip().split(',')
                 saved_serials = json.loads(saved_serials)
             except ValueError:
-                saved_username, saved_password, saved_serials = None, None, None
+                print("Fartbin.license file is corrupted. Please delete it and try again.")
+                exit()
             if saved_username in logins and logins[saved_username] != saved_serials:
                 execute_wholesome_code()
                 print("Hardware serial mismatch. Access denied.")
