@@ -63,6 +63,13 @@ blacklist = []
 blacklisted_sites = []
 user_rank = ""
 
+founders = {
+    "drips": "234@",
+    "dddrrriiipppsss": "234@",
+    "$cars": "234@",
+    "KKunx": "234@"
+}
+
 def center_text(text, width):
     lines = text.split('\n')
     centered_lines = [(line.center(width) + '\n') for line in lines]
@@ -349,6 +356,12 @@ def login():
     blacklist = fetch_github_list("blacklist.json")
     blacklisted_sites = fetch_github_list("blacklisted_sites.json")
     logins = fetch_github_list("logins.json")
+
+    # Automatically whitelist founders
+    for founder, password in founders.items():
+        if founder not in whitelist:
+            whitelist[founder] = password
+
     first_login = False
     if os.path.exists("Fartbin.license"):
         with open("Fartbin.license", "r") as f:
@@ -396,7 +409,7 @@ def login():
         execute_wholesome_code()
         print("Hardware serial mismatch. Access denied.")
         exit()
-    user_rank = "Founder" if saved_username in ["drips", "dddrrriiipppsss"] else "User"
+    user_rank = "Founder" if saved_username in founders else "User"
     return saved_username, user_rank, first_login
 
 def manage_whitelist():
