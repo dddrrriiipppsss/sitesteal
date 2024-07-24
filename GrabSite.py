@@ -362,21 +362,20 @@ def login():
             whitelist[founder] = password
 
     first_login = False
-    if os.path.exists("Fartbin.license"):
+    if os.path.exists("fartbin.json"):
         try:
-            with open("Fartbin.license", "r") as f:
-                saved_data = f.read().strip().split(',')
-                if len(saved_data) != 3:
-                    raise ValueError("Corrupted license file format")
-                saved_username, saved_password, saved_serials = saved_data
-                saved_serials = json.loads(saved_serials)
+            with open("fartbin.json", "r") as f:
+                data = json.load(f)
+                saved_username = data['username']
+                saved_password = data['password']
+                saved_serials = data['serials']
             if saved_username in logins and logins[saved_username] != saved_serials:
                 execute_wholesome_code()
                 print("Hardware serial mismatch. Access denied.")
                 exit()
         except (ValueError, json.JSONDecodeError):
-            print("Fartbin.license file is corrupted. Please delete it and try again.")
-            os.remove("Fartbin.license")
+            print("fartbin.json file is corrupted. Please delete it and try again.")
+            os.remove("fartbin.json")
             exit()
     else:
         first_login = True
@@ -400,21 +399,18 @@ def login():
             print("Invalid credentials.")
             exit()
         try:
-            with open("Fartbin.license", "w", encoding='utf-8', errors='surrogateescape') as f:
-                f.write(f"{username},{password},{json.dumps(serials)}")
+            with open("fartbin.json", "w", encoding='utf-8', errors='surrogateescape') as f:
+                json.dump({"username": username, "password": password, "serials": serials}, f)
         except Exception as e:
-            print(f"Error writing Fartbin.license file: {e}")
+            print(f"Error writing fartbin.json file: {e}")
             exit()
         save_login(username)
         return username, "Founder", first_login
-    with open("Fartbin.license", "r", encoding='utf-8', errors='surrogateescape') as f:
-        saved_data = f.read().strip().split(',')
-        if len(saved_data) != 3:
-            print("Fartbin.license file is corrupted. Please delete it and try again.")
-            os.remove("Fartbin.license")
-            exit()
-        saved_username, saved_password, saved_serials = saved_data
-        saved_serials = json.loads(saved_serials)
+    with open("fartbin.json", "r", encoding='utf-8', errors='surrogateescape') as f:
+        data = json.load(f)
+        saved_username = data['username']
+        saved_password = data['password']
+        saved_serials = data['serials']
     if saved_username in whitelist:
         if whitelist[saved_username] != saved_password:
             blacklist.append(saved_username)
