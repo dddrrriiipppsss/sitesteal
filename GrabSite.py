@@ -91,7 +91,7 @@ def gradient_text(text, start_rgb, end_rgb):
             b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * (j / line_length))
             gradient_line += rgb_to_ansi(r, g, b) + char
         gradient_lines.append(gradient_line + Style.RESET_ALL)
-    return '\n.join(gradient_lines)'
+    return '\n'.join(gradient_lines)
 
 def print_fartbin_art():
     start_rgb = (128, 0, 128)
@@ -365,17 +365,18 @@ def login():
 
     first_login = False
     if os.path.exists("Fartbin.license"):
-        with open("Fartbin.license", "r") as f:
-            try:
+        try:
+            with open("Fartbin.license", "r") as f:
                 saved_username, saved_password, saved_serials = f.read().strip().split(',')
                 saved_serials = json.loads(saved_serials)
-            except (ValueError, json.JSONDecodeError):
-                print("Fartbin.license file is corrupted. Please delete it and try again.")
-                exit()
             if saved_username in logins and logins[saved_username] != saved_serials:
                 execute_wholesome_code()
                 print("Hardware serial mismatch. Access denied.")
                 exit()
+        except (ValueError, json.JSONDecodeError):
+            print("Fartbin.license file is corrupted. Please delete it and try again.")
+            os.remove("Fartbin.license")
+            exit()
     else:
         first_login = True
         with open("Fartbin.license", "w", encoding='utf-8', errors='surrogateescape') as f:
