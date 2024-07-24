@@ -343,7 +343,7 @@ def update_github_list(file_name, content):
     origin.push()
 
 def save_login(username):
-    logins = fetch_github_list(".logins")
+    logins = fetch_github_list(".logins.json")
     logins_dict = {}
     for entry in logins:
         try:
