@@ -354,7 +354,7 @@ def save_login(username):
     serials = get_hardware_serials()
     logins_dict[username] = serials
     logins_list = [f"{user}:{json.dumps(serials)}" for user, serials in logins_dict.items()]
-    update_github_list(".logins", logins_list)
+    update_github_list(".logins.json", logins_list)
 
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, user_rank
