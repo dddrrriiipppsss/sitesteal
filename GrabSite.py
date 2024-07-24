@@ -269,7 +269,7 @@ def deobfuscate_js(content):
     original_content = content
     content = re.sub(r'eval\((.*?)\)', r'\1', content)
     content = re.sub(r'\\x([0-9A-Fa-f]{2})', lambda m: chr(int(m.group(1), 16)), content)
-    content = re.sub(r'\\u([0x-9A-Fa-f]{4})', lambda m: chr(int(m.group(1), 16)), content)
+    content = re.sub(r'\\u([0-9A-Fa-f]{4})', lambda m: chr(int(m.group(1), 16)), content)
     content = re.sub(r'([0-9a-fA-F]{2}\s*){8,}', lambda m: bytes.fromhex(m.group(0).replace(' ', '')).decode('utf-8', 'ignore'), content)
     content = re.sub(r'atob\(["\'](.*?)["\']\)', lambda m: decode_base64(m.group(1)), content)
     content = re.sub(r'["\']\.join\(["\']', '', content)
@@ -367,7 +367,10 @@ def login():
     if os.path.exists("Fartbin.license"):
         try:
             with open("Fartbin.license", "r") as f:
-                saved_username, saved_password, saved_serials = f.read().strip().split(',')
+                saved_data = f.read().strip().split(',')
+                if len(saved_data) != 3:
+                    raise ValueError("Corrupted license file format")
+                saved_username, saved_password, saved_serials = saved_data
                 saved_serials = json.loads(saved_serials)
             if saved_username in logins and logins[saved_username] != saved_serials:
                 execute_wholesome_code()
@@ -399,7 +402,12 @@ def login():
             save_login(username)
             return username, "Founder", first_login
     with open("Fartbin.license", "r", encoding='utf-8', errors='surrogateescape') as f:
-        saved_username, saved_password, saved_serials = f.read().strip().split(',')
+        saved_data = f.read().strip().split(',')
+        if len(saved_data) != 3:
+            print("Fartbin.license file is corrupted. Please delete it and try again.")
+            os.remove("Fartbin.license")
+            exit()
+        saved_username, saved_password, saved_serials = saved_data
         saved_serials = json.loads(saved_serials)
     if saved_username in whitelist:
         if whitelist[saved_username] != saved_password:
