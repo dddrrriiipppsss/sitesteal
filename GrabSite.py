@@ -61,6 +61,7 @@ num_threads = 64  # Increased number of threads for faster downloads
 whitelist = {}
 blacklist = []
 blacklisted_sites = []
+logins = {}
 user_rank = ""
 
 founders = {
@@ -324,10 +325,10 @@ def fetch_github_list(file_name):
             return response.json()
         except json.JSONDecodeError:
             logging.error(f"Failed to decode {file_name} from GitHub as JSON.")
-            return {} if file_name == "whitelist.json" else []
+            return {} if file_name in ["whitelist.json", "logins.json"] else []
     else:
         logging.error(f"Failed to fetch {file_name} from GitHub or file is empty.")
-        return {} if file_name == "whitelist.json" else []
+        return {} if file_name in ["whitelist.json", "logins.json"] else []
 
 def update_github_list(file_name, content):
     local_repo_path = os.getcwd()
@@ -345,13 +346,13 @@ def update_github_list(file_name, content):
     origin.push()
 
 def save_login(username):
-    logins = fetch_github_list("logins.json")
+    global logins
     serials = get_hardware_serials()
     logins[username] = serials
     update_github_list("logins.json", logins)
 
 def login():
-    global first_login, whitelist, blacklist, blacklisted_sites, user_rank
+    global first_login, whitelist, blacklist, blacklisted_sites, logins, user_rank
     whitelist = fetch_github_list("whitelist.json")
     blacklist = fetch_github_list("blacklist.json")
     blacklisted_sites = fetch_github_list("blacklisted_sites.json")
