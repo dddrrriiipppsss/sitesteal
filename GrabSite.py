@@ -60,7 +60,7 @@ download_queue = Queue()
 start_time = None
 num_threads = 128  # Increased number of threads for faster downloads
 
-whitelist = {}
+whitelist = []
 blacklist = []
 blacklisted_sites = []
 logins = {}
@@ -346,7 +346,7 @@ def scan_common_folders(download_folder, base_url):
                         scan_and_queue_file(os.path.join(subdir, file), base_url)
 
 def fetch_list_from_txt(file_name):
-    repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
+    repo_url = "https://raw.githubusercontent.com/yourusername/yourrepository/main/"
     response = requests.get(repo_url + file_name)
     if response.status_code == 200:
         try:
@@ -426,8 +426,8 @@ def login():
             exit()
         password = getpass("Enter your password: ")
         serials = get_hardware_serials()
-        if username in whitelist:
-            if whitelist[username] != password:
+        if username in [entry.split(':')[0] for entry in whitelist]:
+            if next(entry.split(':')[1] for entry in whitelist if entry.split(':')[0] == username) != password:
                 blacklist.append(username)
                 update_list_to_txt("blacklist.txt", blacklist)
                 print("Invalid password. You have been blacklisted.")
@@ -452,8 +452,8 @@ def login():
         saved_username = data['username']
         saved_password = data['password']
         saved_serials = data['serials']
-    if saved_username in whitelist:
-        if whitelist[saved_username] != saved_password:
+    if saved_username in [entry.split(':')[0] for entry in whitelist]:
+        if next(entry.split(':')[1] for entry in whitelist if entry.split(':')[0] == saved_username) != saved_password:
             blacklist.append(saved_username)
             update_list_to_txt("blacklist.txt", blacklist)
             print("Invalid password. You have been blacklisted.")
@@ -530,7 +530,7 @@ def manage_blacklist():
             print("Invalid option. Please try again.")
 
 def check_for_updates():
-    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
+    repo_url = "https://github.com/yourusername/yourrepository.git"
     local_repo_path = os.getcwd()
 
     try:
@@ -548,7 +548,7 @@ def check_for_updates():
         logging.error(f"Failed to check for updates: {e}")
 
 def update_repo():
-    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
+    repo_url = "https://github.com/yourusername/yourrepository.git"
     local_repo_path = os.getcwd()
 
     try:
