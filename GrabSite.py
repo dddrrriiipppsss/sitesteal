@@ -566,7 +566,7 @@ def check_for_updates():
         logging.error(f"Failed to check for updates: {e}")
 
 def update_repo():
-    repo_url = "https://github.com/yourusername/yourrepository.git"
+    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     local_repo_path = os.getcwd()
 
     try:
