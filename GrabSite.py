@@ -547,9 +547,20 @@ def manage_blacklist():
         else:
             print("Invalid option. Please try again.")
 
+def fetch_latest_file(file_url, local_path):
+    try:
+        response = requests.get(file_url)
+        response.raise_for_status()
+        with open(local_path, 'wb') as f:
+            f.write(response.content)
+        logging.info(f"{Fore.GREEN}{datetime.now()} - {local_path} updated successfully{Style.RESET_ALL}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"{Fore.RED}Failed to fetch {file_url}: {e}{Style.RESET_ALL}")
+
 def check_for_updates():
     repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     local_repo_path = os.getcwd()
+    grabsite_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/GrabSite.py"
 
     try:
         repo = git.Repo(local_repo_path)
@@ -562,6 +573,15 @@ def check_for_updates():
         if local_commit != remote_commit:
             logging.info("New update available. Running update script.")
             subprocess.run(["python", "update.py"])
+
+        # Check for updates to GrabSite.py
+        local_grabsite_path = os.path.join(local_repo_path, 'GrabSite.py')
+        fetch_latest_file(grabsite_url, local_grabsite_path)
+
+        # Restart the script
+        logging.info("Restarting the script to apply updates...")
+        os.execv(sys.executable, ['python'] + sys.argv)
+
     except Exception as e:
         logging.error(f"Failed to check for updates: {e}")
 
