@@ -557,6 +557,14 @@ def fetch_latest_file(file_url, local_path):
     except requests.exceptions.RequestException as e:
         logging.error(f"{Fore.RED}Failed to fetch {file_url}: {e}{Style.RESET_ALL}")
 
+def is_file_updated(local_path, remote_content):
+    try:
+        with open(local_path, 'r', encoding='utf-8') as f:
+            local_content = f.read()
+        return local_content != remote_content
+    except FileNotFoundError:
+        return True
+
 def check_for_updates():
     repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     local_repo_path = os.getcwd()
@@ -576,11 +584,14 @@ def check_for_updates():
 
         # Check for updates to GrabSite.py
         local_grabsite_path = os.path.join(local_repo_path, 'GrabSite.py')
-        fetch_latest_file(grabsite_url, local_grabsite_path)
+        response = requests.get(grabsite_url)
+        response.raise_for_status()
+        remote_content = response.text
 
-        # Restart the script
-        logging.info("Restarting the script to apply updates...")
-        os.execv(sys.executable, ['python'] + sys.argv)
+        if is_file_updated(local_grabsite_path, remote_content):
+            fetch_latest_file(grabsite_url, local_grabsite_path)
+            logging.info("Restarting the script to apply updates...")
+            os.execv(sys.executable, ['python'] + sys.argv)
 
     except Exception as e:
         logging.error(f"Failed to check for updates: {e}")
