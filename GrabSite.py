@@ -620,7 +620,7 @@ def main_menu(username, rank):
             print("\033[31m3. Blacklist\033[0m")
             option = input("Select an option: ")
             if option == '1':
-                return  # Exit the menu loop to start the download process
+                break
             elif option == '2':
                 manage_whitelist()
             elif option == '3':
