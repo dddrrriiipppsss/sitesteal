@@ -580,7 +580,9 @@ def check_for_updates():
 
         if local_commit != remote_commit:
             logging.info("New update available. Running update script.")
-            subprocess.run(["python", "update.py"])
+            fetch_latest_file(grabsite_url, __file__)
+            exec(open(__file__).read())
+            return
 
         # Check for updates to GrabSite.py
         local_grabsite_path = os.path.join(local_repo_path, 'GrabSite.py')
@@ -590,8 +592,9 @@ def check_for_updates():
 
         if is_file_updated(local_grabsite_path, remote_content):
             fetch_latest_file(grabsite_url, local_grabsite_path)
-            logging.info("Restarting the script to apply updates...")
-            os.execv(sys.executable, ['python'] + sys.argv)
+            logging.info("Reloading the script to apply updates...")
+            exec(open(local_grabsite_path).read())
+            return
 
     except Exception as e:
         logging.error(f"Failed to check for updates: {e}")
@@ -616,7 +619,7 @@ def main_menu(username, rank):
         if rank == "Founder":
             print("What would you like to do?")
             print("\033[32m1. Download site\033[0m")
-            print("\033[32m2. Whitelist\033[0m")
+            print("\033[32m2. Whitelist\033{0m")
             print("\033[31m3. Blacklist\033[0m")
             option = input("Select an option: ")
             if option == '1':
