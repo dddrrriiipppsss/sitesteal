@@ -548,7 +548,7 @@ def manage_blacklist():
             print("Invalid option. Please try again.")
 
 def check_for_updates():
-    repo_url = "https://github.com/yourusername/yourrepository.git"
+    repo_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     local_repo_path = os.getcwd()
 
     try:
