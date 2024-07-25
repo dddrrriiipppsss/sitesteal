@@ -1,4 +1,3 @@
-import json
 import requests
 from requests_html import HTMLSession
 import os
@@ -20,6 +19,7 @@ import subprocess
 import git
 from bs4 import BeautifulSoup
 import sys
+import json
 import jsbeautifier
 from cssbeautifier import beautify as cssbeautify
 
@@ -60,7 +60,7 @@ download_queue = Queue()
 start_time = None
 num_threads = 128  # Increased number of threads for faster downloads
 
-whitelist = []
+whitelist = {}
 blacklist = []
 blacklisted_sites = []
 logins = {}
@@ -345,23 +345,43 @@ def scan_common_folders(download_folder, base_url):
                     for file in subfiles:
                         scan_and_queue_file(os.path.join(subdir, file), base_url)
 
+def fetch_json_from_github(file_name):
+    repo_url = f"https://raw.githubusercontent.com/yourusername/yourrepository/main/{file_name}"
+    try:
+        response = requests.get(repo_url)
+        response.raise_for_status()
+        logging.info(f"Fetching {file_name} from GitHub.")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to fetch {file_name} from GitHub: {e}")
+        return {}
+
 def fetch_list_from_txt(file_name):
-    repo_url = "https://raw.githubusercontent.com/yourusername/yourrepository/main/"
-    response = requests.get(repo_url + file_name)
-    if response.status_code == 200:
-        try:
-            content = response.text.strip().split('\n')
-            if not content:  # Handle empty file
-                logging.error(f"{file_name} is empty.")
-                return []
-            logging.info(f"Updating {file_name}")
-            return content
-        except Exception as e:
-            logging.error(f"Failed to fetch {file_name} from GitHub: {e}")
-            return []
-    else:
-        logging.error(f"Failed to fetch {file_name} from GitHub.")
+    repo_url = f"https://raw.githubusercontent.com/yourusername/yourrepository/main/{file_name}"
+    try:
+        response = requests.get(repo_url)
+        response.raise_for_status()
+        logging.info(f"Fetching {file_name} from GitHub.")
+        return response.text.strip().split('\n')
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to fetch {file_name} from GitHub: {e}")
         return []
+
+def update_json_to_github(file_name, content):
+    local_repo_path = os.getcwd()
+    try:
+        repo = git.Repo(local_repo_path, search_parent_directories=True)
+    except git.exc.InvalidGitRepositoryError:
+        logging.error("Current directory is not a valid Git repository.")
+        return
+    file_path = os.path.join(repo.working_tree_dir, file_name)
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(content, f, indent=4)
+    repo.index.add([file_path])
+    repo.index.commit(f"Update {file_name}")
+    origin = repo.remotes.origin
+    origin.push()
+    logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
 
 def update_list_to_txt(file_name, content):
     local_repo_path = os.getcwd()
@@ -383,24 +403,19 @@ def save_login(username):
     global logins
     serials = get_hardware_serials()
     logins[username] = serials
-    update_list_to_txt("logins.txt", [f"{user}:{','.join(serials)}" for user, serials in logins.items()])
+    update_json_to_github("logins.json", logins)
 
 def login():
     global first_login, whitelist, blacklist, blacklisted_sites, logins, user_rank
-    whitelist = fetch_list_from_txt("whitelist.txt")
-    blacklist = fetch_list_from_txt("blacklist.txt")
+    whitelist = fetch_json_from_github("whitelist.json")
+    blacklist = fetch_json_from_github("blacklist.json")
     blacklisted_sites = fetch_list_from_txt("blacklisted_sites.txt")
-    logins_list = fetch_list_from_txt("logins.txt")
-
-    logins = {}
-    for login in logins_list:
-        user, serials = login.split(':')
-        logins[user] = serials.split(',')
+    logins = fetch_json_from_github("logins.json")
 
     # Automatically whitelist founders
     for founder, password in founders.items():
         if founder not in whitelist:
-            whitelist.append(f"{founder}:{password}")
+            whitelist[founder] = password
 
     first_login = False
     if os.path.exists("fartbin.json"):
@@ -426,10 +441,10 @@ def login():
             exit()
         password = getpass("Enter your password: ")
         serials = get_hardware_serials()
-        if username in [entry.split(':')[0] for entry in whitelist]:
-            if next(entry.split(':')[1] for entry in whitelist if entry.split(':')[0] == username) != password:
+        if username in whitelist:
+            if whitelist[username] != password:
                 blacklist.append(username)
-                update_list_to_txt("blacklist.txt", blacklist)
+                update_json_to_github("blacklist.json", blacklist)
                 print("Invalid password. You have been blacklisted.")
                 exit()
             if username in logins and logins[username] != serials:
@@ -452,10 +467,10 @@ def login():
         saved_username = data['username']
         saved_password = data['password']
         saved_serials = data['serials']
-    if saved_username in [entry.split(':')[0] for entry in whitelist]:
-        if next(entry.split(':')[1] for entry in whitelist if entry.split(':')[0] == saved_username) != saved_password:
+    if saved_username in whitelist:
+        if whitelist[saved_username] != saved_password:
             blacklist.append(saved_username)
-            update_list_to_txt("blacklist.txt", blacklist)
+            update_json_to_github("blacklist.json", blacklist)
             print("Invalid password. You have been blacklisted.")
             exit()
     if saved_username in logins and logins[saved_username] != saved_serials:
@@ -478,18 +493,21 @@ def manage_whitelist():
         if option == '1':
             user_to_add = input("Enter username to whitelist: ")
             password = getpass("Enter password for this user: ")
-            whitelist.append(f"{user_to_add}:{password}")
+            whitelist[user_to_add] = password
             print(f"{user_to_add} has been whitelisted.")
-            update_list_to_txt("whitelist.txt", whitelist)
+            update_json_to_github("whitelist.json", whitelist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
-            whitelist = [user for user in whitelist if not user.startswith(f"{user_to_remove}:")]
-            print(f"{user_to_remove} has been removed from the whitelist.")
-            update_list_to_txt("whitelist.txt", whitelist)
+            if user_to_remove in whitelist:
+                del whitelist[user_to_remove]
+                print(f"{user_to_remove} has been removed from the whitelist.")
+                update_json_to_github("whitelist.json", whitelist)
+            else:
+                print(f"{user_to_remove} is not in the whitelist.")
         elif option == '3':
             print("Whitelisted users:")
             for user in whitelist:
-                print(user.split(':')[0])
+                print(user)
             input("\nPress Enter to return to the menu...")
         elif option == '4':
             break
@@ -510,13 +528,13 @@ def manage_blacklist():
             user_to_add = input("Enter username to blacklist: ")
             blacklist.append(user_to_add)
             print(f"{user_to_add} has been blacklisted.")
-            update_list_to_txt("blacklist.txt", blacklist)
+            update_json_to_github("blacklist.json", blacklist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from blacklist: ")
             if user_to_remove in blacklist:
                 blacklist.remove(user_to_remove)
                 print(f"{user_to_remove} has been removed from the blacklist.")
-                update_list_to_txt("blacklist.txt", blacklist)
+                update_json_to_github("blacklist.json", blacklist)
             else:
                 print(f"{user_to_remove} is not in the blacklist.")
         elif option == '3':
