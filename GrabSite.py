@@ -346,7 +346,7 @@ def scan_common_folders(download_folder, base_url):
                         scan_and_queue_file(os.path.join(subdir, file), base_url)
 
 def fetch_json_from_github(file_name):
-    repo_url = f"https://raw.githubusercontent.com/yourusername/yourrepository/main/{file_name}"
+    repo_url = f"https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/{file_name}"
     try:
         response = requests.get(repo_url)
         response.raise_for_status()
@@ -357,7 +357,7 @@ def fetch_json_from_github(file_name):
         return {}
 
 def fetch_list_from_txt(file_name):
-    repo_url = f"https://raw.githubusercontent.com/yourusername/yourrepository/main/{file_name}"
+    repo_url = f"https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/{file_name}"
     try:
         response = requests.get(repo_url)
         response.raise_for_status()
