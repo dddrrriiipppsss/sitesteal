@@ -20,6 +20,8 @@ import git
 from bs4 import BeautifulSoup
 import sys
 import json
+import jsbeautifier
+from cssbeautifier import beautify as cssbeautify
 
 # Fix for PyInstaller
 if getattr(sys, 'frozen', False):
@@ -50,13 +52,13 @@ session.headers.update({
     "User-Agent": random.choice(USER_AGENTS),
     "Referer": "https://www.google.com"
 })
-adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
+adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200)
 session.mount('http://', adapter)
 session.mount('https://', adapter)
 
 download_queue = Queue()
 start_time = None
-num_threads = 64  # Increased number of threads for faster downloads
+num_threads = 128  # Increased number of threads for faster downloads
 
 whitelist = {}
 blacklist = []
@@ -114,6 +116,33 @@ def wait_for_captcha():
 
 def sanitize_filename(filename):
     return re.sub(r'[\\/*?:"<>|]', "_", filename)
+
+def beautify_content(file_path, file_type):
+    with open(file_path, 'r', encoding='utf-8', errors='surrogateescape') as f:
+        content = f.read()
+    if file_type == 'js':
+        beautified_content = jsbeautifier.beautify(content)
+    elif file_type == 'css':
+        beautified_content = cssbeautify(content)
+    elif file_type == 'html':
+        soup = BeautifulSoup(content, 'html.parser')
+        beautified_content = soup.prettify()
+    else:
+        beautified_content = content
+    with open(file_path, 'w', encoding='utf-8', errors='surrogateescape') as f:
+        f.write(beautified_content)
+
+def remove_duplicate_assets(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    seen = set()
+    for tag in soup.find_all(['script', 'link', 'img', 'source']):
+        src_attr = 'src' if tag.name in ['script', 'img', 'source'] else 'href'
+        resource_url = tag.get(src_attr)
+        if resource_url in seen:
+            tag.decompose()
+        else:
+            seen.add(resource_url)
+    return str(soup)
 
 def download_file(url, folder, retry_count=0):
     parsed_url = urlparse(url)
@@ -220,10 +249,11 @@ def get_website_source(url, download_folder):
     except Exception as e:
         logging.error(f"{Fore.RED}Failed to fetch {url}: {e}{Style.RESET_ALL}")
         return
+    html_content = remove_duplicate_assets(html_content)
     soup = BeautifulSoup(html_content, 'html.parser')
     main_page_path = os.path.join(download_folder, 'index.html')
     with open(main_page_path, 'w', encoding='utf-8', errors='surrogateescape') as f:
-        f.write(html_content)
+        f.write(soup.prettify())
     resources = set()
     for tag in soup.find_all(['script', 'link', 'img', 'a', 'source', 'iframe', 'video', 'audio']):
         src_attr = 'src' if tag.name in ['script', 'img', 'source', 'iframe', 'video', 'audio'] else 'href'
@@ -318,9 +348,14 @@ def scan_common_folders(download_folder, base_url):
 def fetch_github_list(file_name):
     repo_url = "https://raw.githubusercontent.com/dddrrriiipppsss/sitesteal/main/"
     response = requests.get(repo_url + file_name)
-    if response.status_code == 200 and response.text.strip():
+    if response.status_code == 200:
         try:
-            return response.json()
+            content = response.json()
+            if not content:  # Handle empty JSON file
+                logging.error(f"{file_name} is empty.")
+                return {} if file_name in ["whitelist.json", "logins.json"] else []
+            logging.info(f"Updating {file_name}")
+            return content
         except json.JSONDecodeError:
             logging.error(f"Failed to decode {file_name} from GitHub as JSON.")
             return {} if file_name in ["whitelist.json", "logins.json"] else []
@@ -342,6 +377,7 @@ def update_github_list(file_name, content):
     repo.index.commit(f"Update {file_name}")
     origin = repo.remotes.origin
     origin.push()
+    logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
 
 def save_login(username):
     global logins
@@ -573,6 +609,11 @@ def main():
                         with open(file_path, 'w', encoding='utf-8', errors='surrogateescape') as f:
                             f.write(deobfuscated_content)
                         logging.info(f"{Fore.GREEN}{datetime.now()} - Deobfuscated JavaScript content and saved to {file_path}{Style.RESET_ALL}")
+                beautify_content(file_path, 'js')
+            elif file.endswith('.css'):
+                beautify_content(file_path, 'css')
+            elif file.endswith('.html'):
+                beautify_content(file_path, 'html')
             scan_and_queue_file(file_path, url)
     scan_common_folders(download_folder, url)
     threads = []
