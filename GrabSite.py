@@ -627,6 +627,8 @@ def main_menu(username, rank):
                 manage_blacklist()
             else:
                 print("Invalid option. Please try again.")
+        else:
+            break  # Exit the loop for non-Founders to prevent infinite looping
 
 def main():
     global start_time
@@ -684,6 +686,7 @@ def main():
     site_count = len([f for f in os.listdir(os.getcwd()) if os.path.isdir(f) and re.match(r'[a-z0-9.-]+\.[a-z]{2,}$', f)])
     print(f"\033]0;/fartcord | D: {site_count} | {elapsed_time:.2f}s\007", end='', flush=True)
     logging.info(f"{Fore.CYAN}Completed downloading all resources for {url}{Style.RESET_ALL}")
+    sys.exit()  # Explicitly exit the script to prevent further looping
 
 if __name__ == "__main__":
     main()
