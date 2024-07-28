@@ -64,6 +64,7 @@ blacklist = []
 blacklisted_sites = []
 logins = {}
 user_rank = ""
+founders = {}
 
 def switch_user_agent():
     session.headers.update({
@@ -423,7 +424,7 @@ def update_json_to_github(file_name, content):
     repo.index.add([file_path])
     repo.index.commit(f"Update {file_name}")
     
-    origin_url = "git@github.com:dddrrriiipppsss/sitesteal.git"
+    origin_url = "https://github.com/dddrrriiipppsss/sitesteal.git"
     try:
         origin = repo.remotes.origin
         origin.set_url(origin_url)
