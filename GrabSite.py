@@ -3,7 +3,6 @@ import re
 import time
 import ctypes
 import threading
-import json
 from colorama import init, Fore, Style
 from getpass import getpass
 import shutil
@@ -16,21 +15,27 @@ from requests import Session
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
+import requests
 
 # Initialize colorama
 init(autoreset=True)
 
-# Global Variables
+# Define constants and globals
 USER_AGENTS = [
-    "Mozilla/5.0 ...",  # User agents here
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
 ]
 TARGET_EXTENSIONS = ['.js', '.css', '.gif', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.eot']
-session = Session()
+RETRY_LIMIT = 5
+num_threads = 256  # Increased number of threads for faster downloads
+start_time = None
+
+# Initialize globals
 download_queue = []
 stop_event = threading.Event()
-start_time = None
-num_threads = 256
-retry_limit = 5
+session = Session()
 
 # Function to sanitize filenames
 def sanitize_filename(filename):
@@ -41,11 +46,14 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 # Center the text in the console
-def center_text(text, width):
+def center_text(text, width=None):
     lines = text.split('\n')
+    if width is None:
+        width = shutil.get_terminal_size().columns
     centered_lines = [(line.center(width) + '\n') for line in lines]
     return ''.join(centered_lines)
 
+# Function to apply a gradient to text (for general use)
 def gradient_text(text, start_rgb, end_rgb):
     lines = text.split('\n')
     gradient_lines = []
@@ -60,7 +68,7 @@ def gradient_text(text, start_rgb, end_rgb):
         gradient_lines.append(gradient_line + Style.RESET_ALL)
     return '\n'.join(gradient_lines)
 
-# Function to apply a gradient to the text
+# Function to apply a gradient to the username
 def gradient_username(username, rank):
     if rank == "Founder":
         start_rgb = (255, 0, 0)  # Red gradient for Founder
@@ -81,22 +89,7 @@ def gradient_username(username, rank):
         gradient_text += f'\033[38;2;{r};{g};{b}m{char}'
     return gradient_text + Style.RESET_ALL
 
-def print_download_art(url, username):
-    download_art = f'''
-╔═╗╔╦╗╔╦╗╔═╗╔═╗╦╔═  ╔═╗╔═╗╔╗╔╔╦╗
-╠═╣ ║  ║ ╠═╣║  ╠╩╗  ╚═╗║╣ ║║║ ║
-╩ ╩ ╩  ╩ ╩ ╩╚═╝╩ ╩  ╚═╝╚═╝╝╚╝ ╩
-╚═══════════╦═════════════════════════════╦═════════╝
-╔════════════════╩═════════════════════════════╩════════════════╗
-║ HOST:    [ {url} ]                                            ║
-║ TIME:    [ In Progress ]                                      ║
-║ REQUESTED BY: [ {username} ]                                  ║
-║ SENT ON: [ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ]   ║
-╚═══════════════════════════════════════════════════════════════╝
-    '''
-    print(download_art)
-
-# Function to print the fartbin ASCII art with the appropriate gradient
+# Function to print the Fartbin ASCII art with the appropriate gradient
 def print_fartbin_art(rank):
     if rank == "Founder":
         start_rgb = (255, 0, 0)  # Red gradient for Founder
@@ -119,6 +112,43 @@ def print_fartbin_art(rank):
     centered_fartbin_art = center_text(fartbin_art, terminal_width)
     gradient_fartbin_art = gradient_text(centered_fartbin_art, start_rgb, end_rgb)
     print(gradient_fartbin_art)
+
+# Function to print the download ASCII art
+def print_download_art(url, username):
+    download_art = f'''
+╔═╗╔╦╗╔╦╗╔═╗╔═╗╦╔═  ╔═╗╔═╗╔╗╔╔╦╗
+╠═╣ ║  ║ ╠═╣║  ╠╩╗  ╚═╗║╣ ║║║ ║
+╩ ╩ ╩  ╩ ╩ ╩╚═╝╩ ╩  ╚═╝╚═╝╝╚╝ ╩
+╚═══════════╦═════════════════════════════╦═════════╝
+╔════════════════╩═════════════════════════════╩════════════════╗
+║ HOST:    [ {url} ]
+║ TIME:    [ In Progress ]
+║ REQUESTED BY: [ {username} ]
+║ SENT ON: [ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ]
+╠═══════════════════════════════════════════════════════════════
+    '''
+    terminal_width = shutil.get_terminal_size().columns
+    centered_download_art = center_text(download_art, terminal_width)
+    print(centered_download_art)
+
+# Function to update the TIME field in download art
+def update_download_art(url, username, status):
+    download_art = f'''
+╔═╗╔╦╗╔╦╗╔═╗╔═╗╦╔═  ╔═╗╔═╗╔╗╔╔╦╗
+╠═╣ ║  ║ ╠═╣║  ╠╩╗  ╚═╗║╣ ║║║ ║
+╩ ╩ ╩  ╩ ╩ ╩╚═╝╩ ╩  ╚═╝╚═╝╝╚╝ ╩
+╚═══════════╦═════════════════════════════╦═════════╝
+╔════════════════╩═════════════════════════════╩════════════════╗
+║ HOST:    [ {url} ]
+║ TIME:    [ {status} ]
+║ REQUESTED BY: [ {username} ]
+║ SENT ON: [ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ]
+╠═══════════════════════════════════════════════════════════════
+    '''
+    terminal_width = shutil.get_terminal_size().columns
+    centered_download_art = center_text(download_art, terminal_width)
+    clear_screen()
+    print(centered_download_art)
 
 # Function to get the HWID
 def get_hwid():
@@ -164,18 +194,15 @@ def login():
 def display_after_login(username, rank):
     clear_screen()
     print_fartbin_art(rank)
-    gradient_name = gradient_username(username, rank)
+    print(f"run 'help' for the commands\n")
+    print(f"{gradient_username(username, rank)} ● Tracer X Fartbin ►►")
 
-def update_title():
-    while not stop_event.is_set():
-        elapsed_time = time.time() - start_time
-        site_count = len([f for f in os.listdir(os.getcwd()) if os.path.isdir(f) and re.match(r'[a-z0-9.-]+\.[a-z]{2,}$', f)])
-        title = f"/fartcord | D: {site_count} | {elapsed_time:.2f}s"
-        print(f"\033]0;{title}\007", end='', flush=True)
-        time.sleep(0.01)
-
-def download_site(url, download_folder, username):
+# Function to download the site
+def download_site(url, download_folder, username, rank):
     global start_time
+    clear_screen()
+    print_download_art(url, username)
+    start_time = time.time()
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
     options = Options()
@@ -191,11 +218,7 @@ def download_site(url, download_folder, username):
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         driver.get(url)
-        start_time = time.time()
-        html_content = driver.page_source
-        cookies = driver.get_cookies()
-        for cookie in cookies:
-            session.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
+        page_source = driver.page_source
     except Exception as e:
         print(f"{Fore.RED}Failed to fetch {url}: {e}{Style.RESET_ALL}")
         if driver:
@@ -204,10 +227,10 @@ def download_site(url, download_folder, username):
     finally:
         if driver:
             driver.quit()
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(page_source, 'html.parser')
     main_page_path = os.path.join(download_folder, 'index.html')
     with open(main_page_path, 'w', encoding='utf-8', errors='surrogateescape') as f:
-        f.write(html_content)
+        f.write(page_source)
     resources = set()
     for tag in soup.find_all(['script', 'link', 'img', 'a', 'source', 'iframe', 'video', 'audio']):
         src_attr = 'src' if tag.name in ['script', 'img', 'source', 'iframe', 'video', 'audio'] else 'href'
@@ -225,12 +248,13 @@ def download_site(url, download_folder, username):
         if not os.path.exists(resource_folder):
             os.makedirs(resource_folder, exist_ok=True)
         download_queue.append((resource_url, resource_folder))
-    github_links = re.findall(r'https://github\.com/[A-Za-z0-9._%+-/]+', html_content)
-    if github_links:
-        with open(os.path.join(download_folder, 'github_repos.txt'), 'w', encoding='utf-8') as f:
-            for link in github_links:
-                f.write(link + '\n')
     print(f"{Fore.CYAN}Resources have been queued for download to {download_folder}{Style.RESET_ALL}")
+    update_title()
+    worker()
+    update_download_art(url, username, "Done")
+    time.sleep(1)
+    clear_screen()
+    display_after_login(username, rank)
 
 def download_file(url, folder, retry_count=0):
     parsed_url = urlparse(url)
@@ -248,14 +272,22 @@ def download_file(url, folder, retry_count=0):
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
         print(f"{Fore.GREEN}{datetime.now()} - {local_path}: Successfully Downloaded{Style.RESET_ALL}")
-    except Exception as e:
-        if retry_count < retry_limit:
+    except requests.exceptions.RequestException as e:
+        if retry_count < RETRY_LIMIT:
             print(f"{Fore.YELLOW}{datetime.now()} - Retrying download for {local_path}: Attempt {retry_count + 1}{Style.RESET_ALL}")
             time.sleep(2)
             download_file(url, folder, retry_count + 1)
         else:
             print(f"{Fore.RED}{datetime.now()} - {local_path}: Failed to download ({e}){Style.RESET_ALL}")
     return local_path
+
+def update_title():
+    while not stop_event.is_set():
+        elapsed_time = time.time() - start_time
+        site_count = len([f for f in os.listdir(os.getcwd()) if os.path.isdir(f) and re.match(r'[a-z0-9.-]+\.[a-z]{2,}$', f)])
+        title = f"/fartcord | D: {site_count} | {elapsed_time:.2f}s"
+        print(f"\033]0;{title}\007", end='', flush=True)
+        time.sleep(0.01)
 
 def worker():
     while True:
@@ -268,14 +300,16 @@ def worker():
             print(f"{Fore.RED}{datetime.now()} - Error downloading {url}: {e}{Style.RESET_ALL}")
         download_queue.task_done()
 
+# Main function
 def main():
-    global start_time
     username, rank, first_login = login()
     display_after_login(username, rank)
 
     while True:
         command = input(f"{gradient_username(username, rank)} ● Tracer X Fartbin ►► ").strip().lower()
+        clear_screen()
         if command == 'help':
+            print_fartbin_art(rank)
             print("Available commands:")
             print("download  - Download a website")
             print("clear - Clear the screen")
@@ -284,33 +318,12 @@ def main():
             if not url.startswith("http"):
                 url = "https://" + url
             parsed_url = urlparse(url)
-            download_folder = parsed_url.netloc
-            download_site(url, download_folder, username)
+            download_folder = sanitize_filename(parsed_url.netloc)
+            download_site(url, download_folder, username, rank)
         elif command == 'clear':
-            clear_screen()
             display_after_login(username, rank)
         else:
             print("Invalid command. Please try again.")
-
-    # Start the download process
-    start_time = time.time()
-    stop_event.clear()
-    title_thread = threading.Thread(target=update_title)
-    title_thread.start()
-    threads = []
-    for _ in range(num_threads):
-        t = threading.Thread(target=worker)
-        t.start()
-        threads.append(t)
-    download_queue.join()
-    for _ in range(num_threads):
-        download_queue.append((None, None))
-    for t in threads:
-        t.join()
-    stop_event.set()
-    title_thread.join()
-    elapsed_time = time.time() - start_time
-    print(f"Download completed in {elapsed_time:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
